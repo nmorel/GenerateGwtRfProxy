@@ -3,8 +3,6 @@ package com.github.generategwtrfproxy.wizards;
 import com.google.gdt.eclipse.appengine.rpc.util.RequestFactoryUtils;
 
 import org.eclipse.core.runtime.IStatus;
-import org.eclipse.jdt.core.ICompilationUnit;
-import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.ILocalVariable;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
@@ -15,13 +13,11 @@ import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.viewers.CheckboxTableViewer;
 import org.eclipse.jface.viewers.ColumnWeightData;
 import org.eclipse.jface.viewers.IStructuredContentProvider;
-import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.viewers.TableLayout;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
@@ -31,6 +27,9 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class GenProxyWizardPage extends NewTypeWizardPage {
 
@@ -80,23 +79,21 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
 
   private static final String PAGE_NAME = "GenProxyWizardPage";
 
-  private IType selectedPojo;
+  private IType proxyFor;
 
   private Button entityProxy;
   private Button valueProxy;
   private CheckboxTableViewer methodsTable;
 
-  protected GenProxyWizardPage(IStructuredSelection selection) {
+  protected GenProxyWizardPage(IType selectedPojo) {
     super(false, PAGE_NAME);
     setTitle("Generate Proxy");
     setDescription("Select the getter/setter you want in your proxy");
 
-    IJavaElement jelem = getInitialJavaElement(selection);
-    selectedPojo = ((ICompilationUnit) jelem).findPrimaryType();
+    this.proxyFor = selectedPojo;
 
-    initContainerPage(jelem);
-    initTypePage(jelem);
-    doStatusUpdate();
+    initContainerPage(selectedPojo);
+    initTypePage(selectedPojo);
   }
 
   public void createControl(Composite parent) {
@@ -125,6 +122,28 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     setDefaultValues();
 
     Dialog.applyDialogFont(container);
+  }
+
+  public IType getProxyFor() {
+    return proxyFor;
+  }
+
+  public List<IMethod> getSelectedMethods() {
+    List<IMethod> methods = new ArrayList<IMethod>();
+    for (Object obj : methodsTable.getCheckedElements()) {
+      methods.add((IMethod) obj);
+    }
+    return methods;
+  }
+
+  public boolean isEntityProxy() {
+    return entityProxy.getSelection();
+  }
+
+  @Override
+  protected void handleFieldChanged(String fieldName) {
+    doStatusUpdate();
+    super.handleFieldChanged(fieldName);
   }
 
   private void createGettersSettersSelectionControls(Composite container,
@@ -239,55 +258,16 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
 
     entityProxy = new Button(checks, SWT.RADIO);
     entityProxy.setText("EntityProxy");
-    entityProxy.addSelectionListener(new SelectionAdapter() {
-      public void widgetSelected(SelectionEvent e) {
-        // if (locationWorkspace.getSelection()) {
-        // locationLabel.setEnabled(false);
-        // location.setEnabled(false);
-        // browse.setEnabled(false);
-        // } else {
-        // locationLabel.setEnabled(true);
-        // location.setEnabled(true);
-        // browse.setEnabled(true);
-        // }
-        // dialogChanged();
-      }
-    });
 
     valueProxy = new Button(checks, SWT.RADIO);
     valueProxy.setText("ValueProxy");
-    valueProxy.addSelectionListener(new SelectionAdapter() {
-      public void widgetSelected(SelectionEvent e) {
-        // if (locationWorkspace.getSelection()) {
-        // locationLabel.setEnabled(false);
-        // location.setEnabled(false);
-        // browse.setEnabled(false);
-        // } else {
-        // locationLabel.setEnabled(true);
-        // location.setEnabled(true);
-        // browse.setEnabled(true);
-        // }
-        // dialogChanged();
-      }
-    });
   }
 
   // ------ validation --------
   private void doStatusUpdate() {
     // status of all used components
     IStatus[] status = new IStatus[] {
-        fContainerStatus, fPackageStatus, fTypeNameStatus/*
-                                                          * ,
-                                                          * fActionSuperclassStatus
-                                                          * ,
-                                                          * fActionFieldsStatus,
-                                                          * fResultFieldsStatus,
-                                                          * fActionHandlerStatus
-                                                          * ,
-                                                          * fActionValidatorStatus
-                                                          * ,
-                                                          * fHandlerModuleStatus
-                                                          */};
+        fContainerStatus, fPackageStatus, fTypeNameStatus};
 
     // the mode severe status will be displayed and the OK button
     // enabled/disabled.
@@ -305,7 +285,6 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
         }
       }
     } catch (JavaModelException e) {
-      // TODO Auto-generated catch block
       e.printStackTrace();
     }
   }
@@ -313,14 +292,16 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   private void setDefaultValues() {
     try {
 
-      setTypeName(selectedPojo.getElementName() + "Proxy", true);
+      setTypeName(proxyFor.getElementName() + "Proxy", true);
       entityProxy.setSelection(true);
 
-      for (IMethod method : selectedPojo.getMethods()) {
+      for (IMethod method : proxyFor.getMethods()) {
         if (RequestFactoryUtils.isPropertyAccessor(method)) {
           methodsTable.add(method);
         }
       }
+
+      doStatusUpdate();
 
     } catch (JavaModelException e) {
       // TODO Auto-generated catch block
