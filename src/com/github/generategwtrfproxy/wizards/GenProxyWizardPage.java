@@ -1,13 +1,14 @@
 package com.github.generategwtrfproxy.wizards;
 
-import com.google.gdt.eclipse.appengine.rpc.util.RequestFactoryUtils;
+import com.github.generategwtrfproxy.beans.Method;
+import com.github.generategwtrfproxy.visitors.MethodVisitor;
 
 import org.eclipse.core.runtime.IStatus;
-import org.eclipse.jdt.core.ILocalVariable;
-import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IType;
-import org.eclipse.jdt.core.JavaModelException;
-import org.eclipse.jdt.core.Signature;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.ui.wizards.NewTypeWizardPage;
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.viewers.CheckboxTableViewer;
@@ -33,8 +34,7 @@ import java.util.List;
 
 public class GenProxyWizardPage extends NewTypeWizardPage {
 
-  private class MethodProvider extends LabelProvider implements
-      IStructuredContentProvider {
+  private class MethodProvider implements IStructuredContentProvider {
 
     @Override
     public void dispose() {
@@ -46,32 +46,6 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     }
 
     @Override
-    public String getText(Object element) {
-      try {
-        IMethod method = (IMethod) element;
-        StringBuilder builder = new StringBuilder(
-            Signature.getSignatureSimpleName(method.getReturnType()));
-        builder.append(" ").append(method.getElementName()).append("(");
-        boolean first = true;
-        for (ILocalVariable variable : method.getParameters()) {
-          if (!first) {
-            builder.append(",");
-          }
-          builder.append(Signature.getSignatureSimpleName(variable.getTypeSignature()));
-          builder.append(" ");
-          builder.append(variable.getElementName());
-          first = false;
-        }
-        builder.append(")");
-
-        return builder.toString();
-      } catch (Exception e) {
-        e.printStackTrace();
-        return super.getText(element);
-      }
-    }
-
-    @Override
     public void inputChanged(Viewer viewer, Object oldInput, Object newInput) {
     }
 
@@ -79,10 +53,18 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
 
   private static final String PAGE_NAME = "GenProxyWizardPage";
 
-  private IType proxyFor;
+  private static CompilationUnit parse(ICompilationUnit unit) {
+    ASTParser parser = ASTParser.newParser(AST.JLS3);
+    parser.setKind(ASTParser.K_COMPILATION_UNIT);
+    parser.setSource(unit);
+    parser.setResolveBindings(true);
+    return (CompilationUnit) parser.createAST(null); // parse
+  }
 
+  private IType proxyFor;
   private Button entityProxy;
   private Button valueProxy;
+
   private CheckboxTableViewer methodsTable;
 
   protected GenProxyWizardPage(IType selectedPojo) {
@@ -128,10 +110,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     return proxyFor;
   }
 
-  public List<IMethod> getSelectedMethods() {
-    List<IMethod> methods = new ArrayList<IMethod>();
+  public List<Method> getSelectedMethods() {
+    List<Method> methods = new ArrayList<Method>();
     for (Object obj : methodsTable.getCheckedElements()) {
-      methods.add((IMethod) obj);
+      methods.add((Method) obj);
     }
     return methods;
   }
@@ -154,9 +136,8 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
 
     methodsTable = CheckboxTableViewer.newCheckList(container, SWT.BORDER
         | SWT.V_SCROLL | SWT.H_SCROLL);
-    MethodProvider provider = new MethodProvider();
-    methodsTable.setLabelProvider(provider);
-    methodsTable.setContentProvider(provider);
+    methodsTable.setLabelProvider(new LabelProvider());
+    methodsTable.setContentProvider(new MethodProvider());
     methodsTable.setSelection(new StructuredSelection(), true);
 
     Table table = methodsTable.getTable();
@@ -275,37 +256,28 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   }
 
   private void selectGetterOrSetter(boolean getters) {
-    try {
-      for (int i = 0; i < methodsTable.getTable().getItemCount(); i++) {
-        IMethod method = (IMethod) methodsTable.getElementAt(i);
-        if (RequestFactoryUtils.isGetterMethod(method)) {
-          methodsTable.setChecked(method, getters);
-        } else {
-          methodsTable.setChecked(method, !getters);
-        }
+    for (int i = 0; i < methodsTable.getTable().getItemCount(); i++) {
+      Method method = (Method) methodsTable.getElementAt(i);
+      if (method.isGetter()) {
+        methodsTable.setChecked(method, getters);
+      } else {
+        methodsTable.setChecked(method, !getters);
       }
-    } catch (JavaModelException e) {
-      e.printStackTrace();
     }
   }
 
   private void setDefaultValues() {
-    try {
+    setTypeName(proxyFor.getElementName() + "Proxy", true);
+    entityProxy.setSelection(true);
 
-      setTypeName(proxyFor.getElementName() + "Proxy", true);
-      entityProxy.setSelection(true);
+    CompilationUnit parse = parse(proxyFor.getCompilationUnit());
+    MethodVisitor visitor = new MethodVisitor();
+    parse.accept(visitor);
 
-      for (IMethod method : proxyFor.getMethods()) {
-        if (RequestFactoryUtils.isPropertyAccessor(method)) {
-          methodsTable.add(method);
-        }
-      }
-
-      doStatusUpdate();
-
-    } catch (JavaModelException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
+    for (Method method : visitor.getMethods()) {
+      methodsTable.add(method);
     }
+
+    doStatusUpdate();
   }
 }

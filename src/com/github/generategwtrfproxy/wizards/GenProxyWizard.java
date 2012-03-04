@@ -1,6 +1,8 @@
 package com.github.generategwtrfproxy.wizards;
 
 import com.github.generategwtrfproxy.Activator;
+import com.github.generategwtrfproxy.beans.Method;
+import com.github.generategwtrfproxy.util.Utils;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -9,14 +11,10 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.SubProgressMonitor;
 import org.eclipse.jdt.core.IBuffer;
 import org.eclipse.jdt.core.ICompilationUnit;
-import org.eclipse.jdt.core.IImportDeclaration;
-import org.eclipse.jdt.core.ILocalVariable;
-import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IPackageFragment;
-import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.IType;
-import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.core.dom.rewrite.ImportRewrite;
+import org.eclipse.jdt.core.formatter.CodeFormatter;
 import org.eclipse.jdt.ui.CodeStyleConfiguration;
 import org.eclipse.jface.dialogs.ErrorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
@@ -24,24 +22,13 @@ import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.wizard.Wizard;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class GenProxyWizard extends Wizard {
 
-  private static List<String> getElementSignatures(String typeName) {
-    List<String> list = new ArrayList<String>();
-    if (Signature.getTypeSignatureKind(typeName) == Signature.ARRAY_TYPE_SIGNATURE) {
-      list.add(Signature.getElementType(typeName));
-    } else {
-      String[] names = Signature.getTypeArguments(typeName);
-      list.add(Signature.getTypeErasure(typeName));
-      if (names.length > 0) {
-        list.add(names[0]);
-      }
-    }
-    return list;
-  }
+  private static String lineDelimiter = System.getProperty(
+      "line.separator", "\n"); //$NON-NLS-N$
+
   private GenProxyWizardPage page;
   private IType primaryProxyFor;
 
@@ -88,11 +75,10 @@ public class GenProxyWizard extends Wizard {
       monitor.subTask("Creating proxy");
 
       IType proxyFor = page.getProxyFor();
-      IPackageFragmentRoot srcFolder = page.getPackageFragmentRoot();
       IPackageFragment pkg = page.getPackageFragment();
       String proxyName = page.getTypeName();
       boolean entityProxy = page.isEntityProxy();
-      List<IMethod> selectedMethods = page.getSelectedMethods();
+      List<Method> selectedMethods = page.getSelectedMethods();
 
       ICompilationUnit cu = pkg.createCompilationUnit(proxyName + ".java", "",
           false, new SubProgressMonitor(monitor, 1));
@@ -116,6 +102,7 @@ public class GenProxyWizard extends Wizard {
       buffer.append("@ProxyFor(");
       buffer.append(proxyFor.getElementName());
       buffer.append(".class)");
+      buffer.append(lineDelimiter);
       buffer.append("public interface ");
       buffer.append(proxyName);
       buffer.append(" extends ");
@@ -125,55 +112,14 @@ public class GenProxyWizard extends Wizard {
         buffer.append("ValueProxy");
       }
       buffer.append(" {");
+      buffer.append(lineDelimiter);
 
-      for (IMethod method : selectedMethods) {
-        String methodName = method.getElementName();
-        if (methodName.startsWith("get") || methodName.startsWith("is") || methodName.startsWith("has")) { //$NON-NLS-N$           
+      for (Method method : selectedMethods) {
+        buffer.append(method.toString());
+        buffer.append(";");
+        buffer.append(lineDelimiter);
 
-          String returnType = Signature.toString(method.getReturnType());
-          System.out.println(returnType);
-          for(IImportDeclaration importD : proxyFor.getCompilationUnit().getImports()){
-            String importName = importD.getElementName();
-            if(importName.endsWith(returnType)){
-              imports.addImport(importName);
-              break;
-            }
-          }
-//         System.out.println(getElementSignatures(method.getReturnType()));
-//          System.out.println(methodName);
-//          System.out.println(method.getSignature());
-//          System.out.println(Signature.toString(method.getReturnType()));
-//          System.out.println(Signature.getSignatureQualifier(method.getReturnType()));
-//          System.out.println(Signature.getSignatureSimpleName(method.getReturnType()));
-          
-//          System.out.println(Signature.getReturnType(method.getSignature()));
-//          imports.addImport(Signature.getSignatureQualifier(method.getReturnType())+"."+returnType);
-          buffer.append(returnType);
-          buffer.append(" ");
-          buffer.append(methodName);
-          buffer.append("();");
-          
-        } else if (methodName.startsWith("set")) { 
-          buffer.append("void ");
-          buffer.append(methodName);
-          buffer.append("(");
-         ILocalVariable parameter = method.getParameters()[0];
-         String paramType = Signature.toString(parameter.getTypeSignature());
-         for(IImportDeclaration importD : proxyFor.getCompilationUnit().getImports()){
-           String importName = importD.getElementName();
-           if(importName.endsWith(paramType)){
-             imports.addImport(importName);
-             break;
-           }
-         }
-         buffer.append(paramType);
-         buffer.append(" ");
-         buffer.append(parameter.getElementName());         
-          buffer.append(");");
-//          int index = signature.lastIndexOf(entityName);
-//          signature = signature.substring(0, index) + entityName + "Proxy" //$NON-NLS-N$
-//              + signature.substring(index + entityName.length());
-        }
+        imports.addImport(method.getParamOrReturnTypeBinding());
       }
 
       buffer.append("}");
@@ -181,6 +127,10 @@ public class GenProxyWizard extends Wizard {
       cu.applyTextEdit(
           imports.rewriteImports(new SubProgressMonitor(monitor, 1)),
           new SubProgressMonitor(monitor, 1));
+
+      String formattedContent = Utils.format(buffer.getContents(),
+          CodeFormatter.K_COMPILATION_UNIT);
+      buffer.setContents(formattedContent);
 
       cu.commitWorkingCopy(false, new SubProgressMonitor(monitor, 1));
 
