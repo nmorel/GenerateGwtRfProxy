@@ -29,7 +29,8 @@ public class MethodVisitor extends ASTVisitor {
   public boolean visit(MethodDeclaration node) {
 
     int modifiers = node.getModifiers();
-    if (!Modifier.isPublic(modifiers) || Modifier.isStatic(modifiers)) {
+    if (!Modifier.isPublic(modifiers) || Modifier.isStatic(modifiers)
+        || node.isConstructor()) {
       return false;
     }
 
@@ -148,7 +149,8 @@ public class MethodVisitor extends ASTVisitor {
       return null;
     }
 
-    return new Method(method, parameter.getName().toString(), parameterType, parameterTypeBinding);
+    return new Method(method, parameter.getName().toString(), parameterType,
+        parameterTypeBinding);
   }
 
 }

@@ -13,6 +13,7 @@ import org.eclipse.jdt.core.IBuffer;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IType;
+import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.dom.rewrite.ImportRewrite;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
 import org.eclipse.jdt.ui.CodeStyleConfiguration;
@@ -70,7 +71,7 @@ public class GenProxyWizard extends Wizard {
     if (monitor == null) {
       monitor = new NullProgressMonitor();
     }
-
+    ICompilationUnit cu = null;
     try {
       monitor.subTask("Creating proxy");
 
@@ -80,8 +81,8 @@ public class GenProxyWizard extends Wizard {
       boolean entityProxy = page.isEntityProxy();
       List<Method> selectedMethods = page.getSelectedMethods();
 
-      ICompilationUnit cu = pkg.createCompilationUnit(proxyName + ".java", "",
-          false, new SubProgressMonitor(monitor, 1));
+      cu = pkg.createCompilationUnit(proxyName + ".java", "", false,
+          new SubProgressMonitor(monitor, 1));
 
       cu.becomeWorkingCopy(new SubProgressMonitor(monitor, 1));
 
@@ -144,6 +145,14 @@ public class GenProxyWizard extends Wizard {
       ErrorDialog.openError(getShell(), null, null, status);
 
       return false;
+    } finally {
+      if (null != cu) {
+        try {
+          cu.discardWorkingCopy();
+        } catch (JavaModelException e) {
+          e.printStackTrace();
+        }
+      }
     }
 
     monitor.done();

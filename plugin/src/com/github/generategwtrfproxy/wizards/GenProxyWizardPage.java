@@ -53,18 +53,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
 
   private static final String PAGE_NAME = "GenProxyWizardPage";
 
-  private static CompilationUnit parse(ICompilationUnit unit) {
-    ASTParser parser = ASTParser.newParser(AST.JLS3);
-    parser.setKind(ASTParser.K_COMPILATION_UNIT);
-    parser.setSource(unit);
-    parser.setResolveBindings(true);
-    return (CompilationUnit) parser.createAST(null); // parse
-  }
-
   private IType proxyFor;
+
   private Button entityProxy;
   private Button valueProxy;
-
   private CheckboxTableViewer methodsTable;
 
   protected GenProxyWizardPage(IType selectedPojo) {
@@ -253,6 +245,14 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     // the mode severe status will be displayed and the OK button
     // enabled/disabled.
     updateStatus(status);
+  }
+
+  private CompilationUnit parse(ICompilationUnit unit) {
+    ASTParser parser = ASTParser.newParser(AST.JLS3);
+    parser.setKind(ASTParser.K_COMPILATION_UNIT);
+    parser.setSource(unit);
+    parser.setResolveBindings(true);
+    return (CompilationUnit) parser.createAST(null); // parse
   }
 
   private void selectGetterOrSetter(boolean getters) {
