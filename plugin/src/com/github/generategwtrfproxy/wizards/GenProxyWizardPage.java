@@ -277,6 +277,7 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     for (Method method : visitor.getMethods()) {
       methodsTable.add(method);
     }
+    methodsTable.setAllChecked(true);
 
     doStatusUpdate();
   }
