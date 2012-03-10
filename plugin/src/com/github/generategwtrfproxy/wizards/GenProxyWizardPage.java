@@ -65,6 +65,8 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   private Text proxyForText;
   private IStatus fProxyForStatus = new StatusInfo();
 
+  private Button annotProxyFor;
+  private Button annotProxyForName;
   private Button entityProxy;
   private Button valueProxy;
   private CheckboxTableViewer methodsTable;
@@ -107,6 +109,9 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     createPackageControls(container, nbColumns);
     createTypeNameControls(container, nbColumns);
 
+    createSeparator(container, nbColumns);
+
+    createAnnotationTypeControls(container, nbColumns);
     createProxyTypeControls(container, nbColumns);
 
     createGettersSettersSelectionControls(container, nbColumns);
@@ -128,6 +133,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
       methods.add((Method) obj);
     }
     return methods;
+  }
+
+  public boolean isAnnotProxyFor() {
+    return annotProxyFor.getSelection();
   }
 
   public boolean isEntityProxy() {
@@ -155,6 +164,28 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
       return (IType) dialog.getFirstResult();
     }
     return null;
+  }
+
+  private void createAnnotationTypeControls(Composite container, int nbColumns) {
+    Label label = new Label(container, SWT.NULL);
+    label.setText("Annotation type:");
+
+    GridData gd = new GridData(GridData.FILL);
+    gd.horizontalSpan = nbColumns - 1;
+
+    GridLayout layout = new GridLayout();
+    layout.numColumns = 2;
+    layout.verticalSpacing = 5;
+
+    Composite checks = new Composite(container, SWT.NULL);
+    checks.setLayoutData(gd);
+    checks.setLayout(layout);
+
+    annotProxyFor = new Button(checks, SWT.RADIO);
+    annotProxyFor.setText("ProxyFor");
+
+    annotProxyForName = new Button(checks, SWT.RADIO);
+    annotProxyForName.setText("ProxyForName");
   }
 
   private void createGettersSettersSelectionControls(Composite container,
@@ -391,6 +422,7 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   }
 
   private void setDefaultValues() {
+    annotProxyFor.setSelection(true);
     entityProxy.setSelection(true);
 
     if (null != proxyFor) {

@@ -98,6 +98,7 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       IType proxyFor = page.getProxyFor();
       IPackageFragment pkg = page.getPackageFragment();
       String proxyName = page.getTypeName();
+      boolean isAnnotProxyFor = page.isAnnotProxyFor();
       boolean entityProxy = page.isEntityProxy();
       List<Method> selectedMethods = page.getSelectedMethods();
 
@@ -109,7 +110,11 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       ImportRewrite imports = CodeStyleConfiguration.createImportRewrite(cu,
           false);
       imports.addImport(proxyFor.getFullyQualifiedName());
-      imports.addImport("com.google.web.bindery.requestfactory.shared.ProxyFor");
+      if (isAnnotProxyFor) {
+        imports.addImport("com.google.web.bindery.requestfactory.shared.ProxyFor");
+      } else {
+        imports.addImport("com.google.web.bindery.requestfactory.shared.ProxyForName");
+      }
       if (entityProxy) {
         imports.addImport("com.google.web.bindery.requestfactory.shared.EntityProxy");
       } else {
@@ -120,9 +125,15 @@ public class GenProxyWizard extends Wizard implements INewWizard {
           monitor, 1));
 
       IBuffer buffer = cu.getBuffer();
-      buffer.append("@ProxyFor(value=");
-      buffer.append(proxyFor.getElementName());
-      buffer.append(".class)");
+      if (isAnnotProxyFor) {
+        buffer.append("@ProxyFor(value=");
+        buffer.append(proxyFor.getElementName());
+        buffer.append(".class)");
+      } else {
+        buffer.append("@ProxyForName(value=\"");
+        buffer.append(proxyFor.getFullyQualifiedName());
+        buffer.append("\")");
+      }
       buffer.append(lineDelimiter);
       buffer.append("public interface ");
       buffer.append(proxyName);
