@@ -11,7 +11,9 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.SubProgressMonitor;
 import org.eclipse.jdt.core.IBuffer;
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IPackageFragment;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.dom.rewrite.ImportRewrite;
@@ -21,32 +23,50 @@ import org.eclipse.jface.dialogs.ErrorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.wizard.Wizard;
+import org.eclipse.ui.INewWizard;
+import org.eclipse.ui.IWorkbench;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
-public class GenProxyWizard extends Wizard {
+public class GenProxyWizard extends Wizard implements INewWizard {
 
   private static String lineDelimiter = System.getProperty(
       "line.separator", "\n"); //$NON-NLS-N$
 
   private GenProxyWizardPage page;
-  private IType primaryProxyFor;
 
   private boolean isDone;
 
-  public GenProxyWizard(IStructuredSelection selection) {
-
-    primaryProxyFor = ((ICompilationUnit) selection.getFirstElement()).findPrimaryType();
-
+  public GenProxyWizard() {
     setNeedsProgressMonitor(true);
     setForcePreviousAndNextButtons(true);
     setWindowTitle("New Proxy");
   }
 
-  public void addPages() {
-    page = new GenProxyWizardPage(primaryProxyFor);
+  public void init(IWorkbench workbench, IStructuredSelection selection) {
+    page = new GenProxyWizardPage();
     addPage(page);
+
+    Object element = selection.getFirstElement();
+    if (element instanceof ICompilationUnit) {
+      page.setProxyFor(((ICompilationUnit) selection.getFirstElement()).findPrimaryType());
+    } else if (element instanceof IPackageFragmentRoot) {
+      page.setPackageFragmentRoot((IPackageFragmentRoot) element, true);
+    } else if (element instanceof IPackageFragment) {
+      IPackageFragment pkg = (IPackageFragment) element;
+      IPackageFragmentRoot root = null;
+      IJavaElement parent = pkg.getParent();
+      while (null != parent) {
+        if (parent instanceof IPackageFragmentRoot) {
+          root = (IPackageFragmentRoot) parent;
+          break;
+        }
+        parent = parent.getParent();
+      }
+      page.setPackageFragmentRoot(root, true);
+      page.setPackageFragment(pkg, true);
+    }
   }
 
   @Override
@@ -100,7 +120,7 @@ public class GenProxyWizard extends Wizard {
           monitor, 1));
 
       IBuffer buffer = cu.getBuffer();
-      buffer.append("@ProxyFor(");
+      buffer.append("@ProxyFor(value=");
       buffer.append(proxyFor.getElementName());
       buffer.append(".class)");
       buffer.append(lineDelimiter);

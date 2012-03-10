@@ -9,6 +9,10 @@ import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.search.IJavaSearchConstants;
+import org.eclipse.jdt.core.search.SearchEngine;
+import org.eclipse.jdt.internal.ui.dialogs.FilteredTypesSelectionDialog;
+import org.eclipse.jdt.internal.ui.dialogs.StatusInfo;
 import org.eclipse.jdt.ui.wizards.NewTypeWizardPage;
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.viewers.CheckboxTableViewer;
@@ -18,7 +22,10 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.viewers.TableLayout;
 import org.eclipse.jface.viewers.Viewer;
+import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.ModifyEvent;
+import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
@@ -28,6 +35,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.Text;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,10 +62,18 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   private static final String PAGE_NAME = "GenProxyWizardPage";
 
   private IType proxyFor;
+  private Text proxyForText;
+  private IStatus fProxyForStatus = new StatusInfo();
 
   private Button entityProxy;
   private Button valueProxy;
   private CheckboxTableViewer methodsTable;
+
+  protected GenProxyWizardPage() {
+    super(false, PAGE_NAME);
+    setTitle("Generate Proxy");
+    setDescription("Select the getter/setter you want in your proxy");
+  }
 
   protected GenProxyWizardPage(IType selectedPojo) {
     super(false, PAGE_NAME);
@@ -82,6 +98,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     layout.numColumns = nbColumns;
     layout.verticalSpacing = 5;
     container.setLayout(layout);
+
+    createProxyForControls(container, nbColumns);
+
+    createSeparator(container, nbColumns);
 
     createContainerControls(container, nbColumns);
     createPackageControls(container, nbColumns);
@@ -114,10 +134,27 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     return entityProxy.getSelection();
   }
 
+  public void setProxyFor(IType proxyFor) {
+    this.proxyFor = proxyFor;
+  }
+
   @Override
   protected void handleFieldChanged(String fieldName) {
     doStatusUpdate();
     super.handleFieldChanged(fieldName);
+  }
+
+  private IType chooseProxyFor() {
+    FilteredTypesSelectionDialog dialog = new FilteredTypesSelectionDialog(
+        getShell(), false, getWizard().getContainer(),
+        SearchEngine.createWorkspaceScope(), IJavaSearchConstants.CLASS);
+    dialog.setTitle("ProxyFor selection");
+    dialog.setMessage("Select the class to proxy");
+
+    if (dialog.open() == Window.OK) {
+      return (IType) dialog.getFirstResult();
+    }
+    return null;
   }
 
   private void createGettersSettersSelectionControls(Composite container,
@@ -214,6 +251,49 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     });
   }
 
+  private void createProxyForControls(Composite container, int nbColumns) {
+    Label label = new Label(container, SWT.NULL);
+    label.setText("Proxy for:");
+
+    GridData gd = new GridData();
+    gd.horizontalAlignment = GridData.FILL;
+    gd.horizontalSpan = nbColumns - 2;
+
+    proxyForText = new Text(container, SWT.BORDER | SWT.SINGLE);
+    proxyForText.setLayoutData(gd);
+    proxyForText.setEditable(false);
+    proxyForText.addModifyListener(new ModifyListener() {
+      public void modifyText(ModifyEvent e) {
+        fProxyForStatus = proxyForChanged();
+        doStatusUpdate();
+      }
+    });
+
+    Button browse = new Button(container, SWT.PUSH);
+    browse.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+    browse.setText("Browse...");
+    browse.addSelectionListener(new SelectionListener() {
+      @Override
+      public void widgetDefaultSelected(SelectionEvent e) {
+        proxyFor = chooseProxyFor();
+        if (null != proxyFor) {
+          proxyForText.setText(proxyFor.getFullyQualifiedName('.'));
+        }
+      }
+
+      @Override
+      public void widgetSelected(SelectionEvent e) {
+        proxyFor = chooseProxyFor();
+        if (null != proxyFor) {
+          proxyForText.setText(proxyFor.getFullyQualifiedName('.'));
+        }
+      }
+    });
+
+    fProxyForStatus = proxyForChanged();
+    doStatusUpdate();
+  }
+
   private void createProxyTypeControls(Composite container, int nbColumns) {
     Label label = new Label(container, SWT.NULL);
     label.setText("Proxy type:");
@@ -240,7 +320,7 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   private void doStatusUpdate() {
     // status of all used components
     IStatus[] status = new IStatus[] {
-        fContainerStatus, fPackageStatus, fTypeNameStatus};
+        fProxyForStatus, fContainerStatus, fPackageStatus, fTypeNameStatus};
 
     // the mode severe status will be displayed and the OK button
     // enabled/disabled.
@@ -255,6 +335,50 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     return (CompilationUnit) parser.createAST(null); // parse
   }
 
+  private IStatus proxyForChanged() {
+    StatusInfo status = new StatusInfo();
+
+    if (null == proxyFor) {
+      status.setError("You must select a class to proxy");
+      return status;
+    }
+
+    if (null == getPackageFragmentRoot()) {
+      initContainerPage(proxyFor);
+    }
+
+    if (null == getPackageFragment() || getPackageFragment().isDefaultPackage()) {
+      initTypePage(proxyFor);
+    }
+
+    if (getTypeName().isEmpty()) {
+      setTypeName(proxyFor.getElementName() + "Proxy", true);
+    }
+
+    if (null != methodsTable) {
+
+      // removing the previous methods
+      Object[] elements = new Object[methodsTable.getTable().getItemCount()];
+      for (int i = 0; i < methodsTable.getTable().getItemCount(); i++) {
+        elements[i] = methodsTable.getElementAt(i);
+      }
+      methodsTable.remove(elements);
+
+      // parse the new proxyFor to find the getter/setter and add them to the
+      // table
+      CompilationUnit parse = parse(proxyFor.getCompilationUnit());
+      MethodVisitor visitor = new MethodVisitor();
+      parse.accept(visitor);
+
+      for (Method method : visitor.getMethods()) {
+        methodsTable.add(method);
+      }
+      methodsTable.setAllChecked(true);
+    }
+
+    return status;
+  }
+
   private void selectGetterOrSetter(boolean getters) {
     for (int i = 0; i < methodsTable.getTable().getItemCount(); i++) {
       Method method = (Method) methodsTable.getElementAt(i);
@@ -267,17 +391,13 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   }
 
   private void setDefaultValues() {
-    setTypeName(proxyFor.getElementName() + "Proxy", true);
     entityProxy.setSelection(true);
 
-    CompilationUnit parse = parse(proxyFor.getCompilationUnit());
-    MethodVisitor visitor = new MethodVisitor();
-    parse.accept(visitor);
-
-    for (Method method : visitor.getMethods()) {
-      methodsTable.add(method);
+    if (null != proxyFor) {
+      proxyForText.setText(proxyFor.getFullyQualifiedName('.'));
     }
-    methodsTable.setAllChecked(true);
+
+    fProxyForStatus = proxyForChanged();
 
     doStatusUpdate();
   }
