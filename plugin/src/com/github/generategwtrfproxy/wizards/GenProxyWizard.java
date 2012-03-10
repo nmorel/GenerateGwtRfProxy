@@ -99,6 +99,7 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       IPackageFragment pkg = page.getPackageFragment();
       String proxyName = page.getTypeName();
       boolean isAnnotProxyFor = page.isAnnotProxyFor();
+      String locator = page.getLocator();
       boolean entityProxy = page.isEntityProxy();
       List<Method> selectedMethods = page.getSelectedMethods();
 
@@ -115,6 +116,9 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       } else {
         imports.addImport("com.google.web.bindery.requestfactory.shared.ProxyForName");
       }
+      if (null != locator && locator.length() > 0 && isAnnotProxyFor) {
+        imports.addImport(locator);
+      }
       if (entityProxy) {
         imports.addImport("com.google.web.bindery.requestfactory.shared.EntityProxy");
       } else {
@@ -128,11 +132,28 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       if (isAnnotProxyFor) {
         buffer.append("@ProxyFor(value=");
         buffer.append(proxyFor.getElementName());
-        buffer.append(".class)");
+        buffer.append(".class");
+        if (null != locator && locator.length() > 0) {
+          buffer.append(", locator=");
+          int index = locator.lastIndexOf(".");
+          if (index == -1) {
+            buffer.append(locator);
+          } else {
+            buffer.append(locator.substring(index + 1));
+          }
+          buffer.append(".class");
+        }
+        buffer.append(")");
       } else {
         buffer.append("@ProxyForName(value=\"");
         buffer.append(proxyFor.getFullyQualifiedName());
-        buffer.append("\")");
+        buffer.append("\"");
+        if (null != locator && locator.length() > 0) {
+          buffer.append(", locator=\"");
+          buffer.append(locator);
+          buffer.append("\"");
+        }
+        buffer.append(")");
       }
       buffer.append(lineDelimiter);
       buffer.append("public interface ");

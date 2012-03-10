@@ -4,8 +4,11 @@ import com.github.generategwtrfproxy.beans.Method;
 import com.github.generategwtrfproxy.visitors.MethodVisitor;
 
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IType;
+import org.eclipse.jdt.core.ITypeHierarchy;
+import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -63,6 +66,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
 
   private IType proxyFor;
   private Text proxyForText;
+  private IStatus fLocatorStatus = new StatusInfo();
+
+  private IType locator;
+  private Text locatorText;
   private IStatus fProxyForStatus = new StatusInfo();
 
   private Button annotProxyFor;
@@ -74,18 +81,7 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   protected GenProxyWizardPage() {
     super(false, PAGE_NAME);
     setTitle("Generate Proxy");
-    setDescription("Select the getter/setter you want in your proxy");
-  }
-
-  protected GenProxyWizardPage(IType selectedPojo) {
-    super(false, PAGE_NAME);
-    setTitle("Generate Proxy");
-    setDescription("Select the getter/setter you want in your proxy");
-
-    this.proxyFor = selectedPojo;
-
-    initContainerPage(selectedPojo);
-    initTypePage(selectedPojo);
+    setDescription("Generate an EntityProxy/ValueProxy for the selected class");
   }
 
   public void createControl(Composite parent) {
@@ -112,6 +108,7 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     createSeparator(container, nbColumns);
 
     createAnnotationTypeControls(container, nbColumns);
+    createLocatorControls(container, nbColumns);
     createProxyTypeControls(container, nbColumns);
 
     createGettersSettersSelectionControls(container, nbColumns);
@@ -121,6 +118,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     setDefaultValues();
 
     Dialog.applyDialogFont(container);
+  }
+
+  public String getLocator() {
+    return locatorText.getText();
   }
 
   public IType getProxyFor() {
@@ -143,6 +144,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     return entityProxy.getSelection();
   }
 
+  public void setLocator(IType locator) {
+    this.locator = locator;
+  }
+
   public void setProxyFor(IType proxyFor) {
     this.proxyFor = proxyFor;
   }
@@ -151,6 +156,19 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   protected void handleFieldChanged(String fieldName) {
     doStatusUpdate();
     super.handleFieldChanged(fieldName);
+  }
+
+  private IType chooseLocatorFor() {
+    FilteredTypesSelectionDialog dialog = new FilteredTypesSelectionDialog(
+        getShell(), false, getWizard().getContainer(),
+        SearchEngine.createWorkspaceScope(), IJavaSearchConstants.CLASS);
+    dialog.setTitle("Locator selection");
+    dialog.setMessage("Select the locator");
+
+    if (dialog.open() == Window.OK) {
+      return (IType) dialog.getFirstResult();
+    }
+    return null;
   }
 
   private IType chooseProxyFor() {
@@ -282,6 +300,48 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     });
   }
 
+  private void createLocatorControls(Composite container, int nbColumns) {
+    Label label = new Label(container, SWT.NULL);
+    label.setText("Locator:");
+
+    GridData gd = new GridData();
+    gd.horizontalAlignment = GridData.FILL;
+    gd.horizontalSpan = nbColumns - 2;
+
+    locatorText = new Text(container, SWT.BORDER | SWT.SINGLE);
+    locatorText.setLayoutData(gd);
+    locatorText.addModifyListener(new ModifyListener() {
+      public void modifyText(ModifyEvent e) {
+        fLocatorStatus = locatorChanged();
+        doStatusUpdate();
+      }
+    });
+
+    Button browse = new Button(container, SWT.PUSH);
+    browse.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+    browse.setText("Browse...");
+    browse.addSelectionListener(new SelectionListener() {
+      @Override
+      public void widgetDefaultSelected(SelectionEvent e) {
+        locator = chooseLocatorFor();
+        if (null != locator) {
+          locatorText.setText(locator.getFullyQualifiedName('.'));
+        }
+      }
+
+      @Override
+      public void widgetSelected(SelectionEvent e) {
+        locator = chooseLocatorFor();
+        if (null != locator) {
+          locatorText.setText(locator.getFullyQualifiedName('.'));
+        }
+      }
+    });
+
+    fLocatorStatus = locatorChanged();
+    doStatusUpdate();
+  }
+
   private void createProxyForControls(Composite container, int nbColumns) {
     Label label = new Label(container, SWT.NULL);
     label.setText("Proxy for:");
@@ -351,11 +411,50 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   private void doStatusUpdate() {
     // status of all used components
     IStatus[] status = new IStatus[] {
-        fProxyForStatus, fContainerStatus, fPackageStatus, fTypeNameStatus};
+        fProxyForStatus, fLocatorStatus, fContainerStatus, fPackageStatus,
+        fTypeNameStatus};
 
     // the mode severe status will be displayed and the OK button
     // enabled/disabled.
     updateStatus(status);
+  }
+
+  private IStatus locatorChanged() {
+    StatusInfo status = new StatusInfo();
+    if (locatorText.getText().isEmpty()) {
+      return status;
+    }
+
+    if (null == locator) {
+      status.setWarning("Cannot test if the locator is correct");
+      return status;
+    }
+
+    if (locator.getFullyQualifiedName().equals(locatorText.getText())) {
+
+      // selection from dialogBox
+      try {
+        ITypeHierarchy hierarchy = locator.newSupertypeHierarchy(new NullProgressMonitor());
+        IType[] superclasses = hierarchy.getAllClasses();
+        for (IType superclass : superclasses) {
+          if (superclass.getFullyQualifiedName('.').equals(
+              "com.google.web.bindery.requestfactory.shared.Locator")) {
+            return status;
+          }
+        }
+      } catch (JavaModelException e) {
+        e.printStackTrace();
+      }
+
+      status.setError("The selected locator does not extend the class Locator");
+      return status;
+
+    }
+
+    // locator directly written inside the text input
+    locator = null;
+    status.setWarning("Cannot test if the locator is correct");
+    return status;
   }
 
   private CompilationUnit parse(ICompilationUnit unit) {
@@ -429,7 +528,12 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
       proxyForText.setText(proxyFor.getFullyQualifiedName('.'));
     }
 
+    if (null != locator) {
+      locatorText.setText(locator.getFullyQualifiedName('.'));
+    }
+
     fProxyForStatus = proxyForChanged();
+    fLocatorStatus = locatorChanged();
 
     doStatusUpdate();
   }
