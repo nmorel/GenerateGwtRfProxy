@@ -2,7 +2,7 @@
 <feature
       id="com.github.generategwtrfproxy.feature"
       label="GenerateGwtRfProxyFeature"
-      version="0.0.1">
+      version="0.0.2">
 
    <description url="https://github.com/nmorel/GenerateGwtRfProxy">
       Eclipse plugin to generate the GWT RequestFactory proxy
@@ -26,7 +26,7 @@
          id="com.github.generategwtrfproxy.plugin"
          download-size="0"
          install-size="0"
-         version="0.0.1"
+         version="0.0.2"
          unpack="false"/>
 
 </feature>
