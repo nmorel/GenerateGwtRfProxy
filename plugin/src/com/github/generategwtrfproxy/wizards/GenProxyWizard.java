@@ -4,6 +4,7 @@ import com.github.generategwtrfproxy.Activator;
 import com.github.generategwtrfproxy.beans.Method;
 import com.github.generategwtrfproxy.util.Utils;
 
+import org.eclipse.core.runtime.Assert;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.NullProgressMonitor;
@@ -16,25 +17,38 @@ import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaModelException;
+import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.rewrite.ImportRewrite;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
 import org.eclipse.jdt.ui.CodeStyleConfiguration;
 import org.eclipse.jface.dialogs.ErrorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
+import org.eclipse.jface.util.Policy;
 import org.eclipse.jface.viewers.IStructuredSelection;
+import org.eclipse.jface.wizard.IWizardPage;
 import org.eclipse.jface.wizard.Wizard;
+import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.INewWizard;
 import org.eclipse.ui.IWorkbench;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GenProxyWizard extends Wizard implements INewWizard {
 
   private static String lineDelimiter = System.getProperty(
       "line.separator", "\n"); //$NON-NLS-N$
 
-  private GenProxyWizardPage page;
+  private GenProxyWizardPage initialPage;
+
+  private List<GenProxyWizardPage> pages = new ArrayList<GenProxyWizardPage>();
+
+  private Map<IType, GenProxyWizardPage> mapTypeToPage = new HashMap<IType, GenProxyWizardPage>();
+
+  private IType initialProxyFor;
 
   private boolean isDone;
 
@@ -44,16 +58,147 @@ public class GenProxyWizard extends Wizard implements INewWizard {
     setWindowTitle("New Proxy");
   }
 
+  @Override
+  public boolean canFinish() {
+    // Default implementation is to check if all pages are complete.
+    for (int i = 0; i < pages.size(); i++) {
+      if (!pages.get(i).isPageComplete()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @Override
+  public void createPageControls(Composite pageContainer) {
+    // the default behavior is to create all the pages controls
+    for (int i = 0; i < pages.size(); i++) {
+      IWizardPage page = (IWizardPage) pages.get(i);
+      page.createControl(pageContainer);
+      // page is responsible for ensuring the created control is
+      // accessable
+      // via getControl.
+      Assert.isNotNull(page.getControl());
+    }
+  }
+
+  @Override
+  public void dispose() {
+    // notify pages
+    disposePage(initialPage);
+    for (GenProxyWizardPage page : mapTypeToPage.values()) {
+      disposePage(page);
+    }
+    super.dispose();
+  }
+
+  @Override
+  public IWizardPage getNextPage(IWizardPage wizardPage) {
+    List<GenProxyWizardPage> newList = new ArrayList<GenProxyWizardPage>();
+    for (GenProxyWizardPage page : pages) {
+      newList.add(page);
+      if (page == wizardPage) {
+        break;
+      }
+    }
+    pages = newList;
+
+    if (null != initialProxyFor) {
+      mapTypeToPage.remove(initialProxyFor);
+    }
+    initialProxyFor = initialPage.getProxyFor();
+    if (null != initialProxyFor) {
+      mapTypeToPage.put(initialProxyFor, initialPage);
+    }
+
+    GenProxyWizardPage nextPage = null;
+
+    for (GenProxyWizardPage page : pages) {
+
+      List<Method> methods = page.getSelectedMethods();
+      if (null == methods || methods.isEmpty()) {
+        continue;
+      }
+
+      for (Method method : methods) {
+        nextPage = null;
+        IType type = getTypeToProxy(method.getParamOrReturnTypeBinding());
+        if (null != type) {
+          nextPage = mapTypeToPage.get(type);
+          if (null == nextPage) {
+            nextPage = new GenProxyWizardPage();
+            nextPage.setPackageFragmentRoot(
+                initialPage.getPackageFragmentRoot(), true);
+            nextPage.setPackageFragment(initialPage.getPackageFragment(), true);
+            nextPage.setProxyFor(type);
+            mapTypeToPage.put(type, nextPage);
+            break;
+          } else {
+            boolean typeNotAlreadyDefined = true;
+            for (GenProxyWizardPage p : pages) {
+              // if a page has already been completed for this type
+              if (p == nextPage) {
+                typeNotAlreadyDefined = false;
+              }
+            }
+            if (typeNotAlreadyDefined) {
+              break;
+            }
+          }
+        }
+      }
+
+      if (null != nextPage) {
+        break;
+      }
+    }
+
+    if (null != nextPage) {
+      pages.add(nextPage);
+      nextPage.setWizard(this);
+      return nextPage;
+    }
+
+    return null;
+  }
+
+  @Override
+  public IWizardPage[] getPages() {
+    return pages.toArray(new IWizardPage[pages.size()]);
+  }
+
+  @Override
+  public IWizardPage getPreviousPage(IWizardPage page) {
+    int index = pages.indexOf(page);
+    if (index == 0 || index == -1) {
+      // first page or page not found
+      return null;
+    }
+    return (IWizardPage) pages.get(index - 1);
+  }
+
+  @Override
+  public IWizardPage getStartingPage() {
+    return initialPage;
+  }
+
   public void init(IWorkbench workbench, IStructuredSelection selection) {
-    page = new GenProxyWizardPage();
-    addPage(page);
+    initialPage = new GenProxyWizardPage();
+    pages.add(initialPage);
+    initialPage.setWizard(this);
 
     Object element = selection.getFirstElement();
+
     if (element instanceof ICompilationUnit) {
-      page.setProxyFor(((ICompilationUnit) selection.getFirstElement()).findPrimaryType());
+
+      initialPage.setProxyFor(((ICompilationUnit) selection.getFirstElement()).findPrimaryType());
+
     } else if (element instanceof IPackageFragmentRoot) {
-      page.setPackageFragmentRoot((IPackageFragmentRoot) element, true);
+
+      initialPage.setPackageFragmentRoot((IPackageFragmentRoot) element, true);
+
     } else if (element instanceof IPackageFragment) {
+
       IPackageFragment pkg = (IPackageFragment) element;
       IPackageFragmentRoot root = null;
       IJavaElement parent = pkg.getParent();
@@ -64,8 +209,9 @@ public class GenProxyWizard extends Wizard implements INewWizard {
         }
         parent = parent.getParent();
       }
-      page.setPackageFragmentRoot(root, true);
-      page.setPackageFragment(pkg, true);
+      initialPage.setPackageFragmentRoot(root, true);
+      initialPage.setPackageFragment(pkg, true);
+
     }
   }
 
@@ -86,22 +232,113 @@ public class GenProxyWizard extends Wizard implements INewWizard {
     return isDone;
   }
 
+  private void disposePage(GenProxyWizardPage page) {
+    try {
+      page.dispose();
+    } catch (Exception e) {
+      Status status = new Status(IStatus.ERROR, Policy.JFACE, IStatus.ERROR,
+          e.getMessage(), e);
+      Policy.getLog().log(status);
+    }
+  }
+
   private boolean finish(IProgressMonitor desiredMonitor) {
     IProgressMonitor monitor = desiredMonitor;
     if (monitor == null) {
       monitor = new NullProgressMonitor();
     }
+
+    try {
+      for (GenProxyWizardPage page : pages) {
+        writeProxy(monitor, page);
+      }
+    } catch (Exception e) {
+      monitor.done();
+      return false;
+    }
+
+    monitor.done();
+    return true;
+  }
+
+  private IType getTypeToProxy(ITypeBinding type) {
+    if (Utils.isValueType(type)) {
+      return null;
+    }
+    // List or Set
+    if (type.isParameterizedType()) {
+      ITypeBinding genericParameter = type.getTypeArguments()[0];
+      if (Utils.isValueType(genericParameter)) {
+        return null;
+      } else {
+        return (IType) genericParameter.getJavaElement();
+      }
+    }
+
+    return (IType) type.getJavaElement();
+  }
+
+  private void writeMethod(Method method, ImportRewrite imports, IBuffer buffer) {
+
+    // add import including List and Set and their generic type
+    imports.addImport(method.getParamOrReturnTypeBinding());
+
+    String paramOrReturnName = method.getParamOrReturnTypeBinding().getName();
+    IType type = getTypeToProxy(method.getParamOrReturnTypeBinding());
+    if (null != type) {
+      GenProxyWizardPage page = mapTypeToPage.get(type);
+
+      // replace the type name by the proxy name to keep the List and Set in the
+      // name
+      paramOrReturnName = paramOrReturnName.replaceAll(type.getElementName(),
+          page.getTypeName());
+
+      // retrieving package for import
+      String paramOrReturnFullyQualifiedName = page.getPackageFragment().getElementName();
+      if (null == paramOrReturnFullyQualifiedName
+          || paramOrReturnFullyQualifiedName.length() == 0) {
+        paramOrReturnFullyQualifiedName = page.getTypeName();
+      } else {
+        paramOrReturnFullyQualifiedName += "." + page.getTypeName();
+      }
+      imports.addImport(paramOrReturnFullyQualifiedName);
+      // remove the import added from first addImport call. Little trick to keep
+      // the List and Set import
+      imports.removeImport(type.getFullyQualifiedName());
+    }
+
+    if (method.isGetter()) {
+      buffer.append(paramOrReturnName);
+    } else {
+      buffer.append("void");
+    }
+
+    buffer.append(" ");
+    buffer.append(method.getMethodName());
+    buffer.append("(");
+    if (!method.isGetter()) {
+      buffer.append(paramOrReturnName);
+      buffer.append(" ");
+      buffer.append(method.getParameterName());
+    }
+    buffer.append(");");
+    buffer.append(lineDelimiter);
+  }
+
+  private void writeProxy(IProgressMonitor monitor, GenProxyWizardPage page)
+      throws Exception {
+
+    IType proxyFor = page.getProxyFor();
+    IPackageFragment pkg = page.getPackageFragment();
+    String proxyName = page.getTypeName();
+    boolean isAnnotProxyFor = page.isAnnotProxyFor();
+    String locator = page.getLocator();
+    boolean entityProxy = page.isEntityProxy();
+    List<Method> selectedMethods = page.getSelectedMethods();
+
     ICompilationUnit cu = null;
     try {
       monitor.subTask("Creating proxy");
-
-      IType proxyFor = page.getProxyFor();
-      IPackageFragment pkg = page.getPackageFragment();
-      String proxyName = page.getTypeName();
-      boolean isAnnotProxyFor = page.isAnnotProxyFor();
-      String locator = page.getLocator();
-      boolean entityProxy = page.isEntityProxy();
-      List<Method> selectedMethods = page.getSelectedMethods();
 
       cu = pkg.createCompilationUnit(proxyName + ".java", "", false,
           new SubProgressMonitor(monitor, 1));
@@ -168,11 +405,7 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       buffer.append(lineDelimiter);
 
       for (Method method : selectedMethods) {
-        buffer.append(method.toString());
-        buffer.append(";");
-        buffer.append(lineDelimiter);
-
-        imports.addImport(method.getParamOrReturnTypeBinding());
+        writeMethod(method, imports, buffer);
       }
 
       buffer.append("}");
@@ -196,7 +429,7 @@ public class GenProxyWizard extends Wizard implements INewWizard {
 
       ErrorDialog.openError(getShell(), null, null, status);
 
-      return false;
+      throw e;
     } finally {
       if (null != cu) {
         try {
@@ -206,8 +439,5 @@ public class GenProxyWizard extends Wizard implements INewWizard {
         }
       }
     }
-
-    monitor.done();
-    return true;
   }
 }

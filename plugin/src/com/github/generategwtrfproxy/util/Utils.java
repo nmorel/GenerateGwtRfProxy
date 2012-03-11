@@ -13,7 +13,6 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.Set;
 
 public class Utils {
 
@@ -22,10 +21,6 @@ public class Utils {
       BigDecimal.class.getName(), Boolean.class.getName(),
       Byte.class.getName(), Character.class.getName(), Double.class.getName(),
       Float.class.getName(), Integer.class.getName(), Short.class.getName());
-
-  private static List<String> IMPORT_TYPES = Arrays.asList(
-      Date.class.getName(), BigInteger.class.getName(),
-      BigDecimal.class.getName(), List.class.getName(), Set.class.getName());
 
   public static String format(String source, int formatType) {
 
@@ -60,10 +55,6 @@ public class Utils {
   public static boolean isTypeCanBeProxied(ITypeBinding type) {
     return !isValueType(type) && !type.isParameterizedType() && !type.isArray()
         && !type.isWildcardType() && Modifier.isPublic(type.getModifiers());
-  }
-
-  public static boolean isTypeRequireImport(ITypeBinding type) {
-    return IMPORT_TYPES.contains(type.getQualifiedName());
   }
 
   public static boolean isValueType(ITypeBinding type) {

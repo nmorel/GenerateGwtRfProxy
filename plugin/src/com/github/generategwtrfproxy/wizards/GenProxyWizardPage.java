@@ -18,8 +18,10 @@ import org.eclipse.jdt.internal.ui.dialogs.FilteredTypesSelectionDialog;
 import org.eclipse.jdt.internal.ui.dialogs.StatusInfo;
 import org.eclipse.jdt.ui.wizards.NewTypeWizardPage;
 import org.eclipse.jface.dialogs.Dialog;
+import org.eclipse.jface.viewers.CheckStateChangedEvent;
 import org.eclipse.jface.viewers.CheckboxTableViewer;
 import org.eclipse.jface.viewers.ColumnWeightData;
+import org.eclipse.jface.viewers.ICheckStateListener;
 import org.eclipse.jface.viewers.IStructuredContentProvider;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.StructuredSelection;
@@ -129,11 +131,14 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
   }
 
   public List<Method> getSelectedMethods() {
-    List<Method> methods = new ArrayList<Method>();
-    for (Object obj : methodsTable.getCheckedElements()) {
-      methods.add((Method) obj);
+    if (null != methodsTable) {
+      List<Method> methods = new ArrayList<Method>();
+      for (Object obj : methodsTable.getCheckedElements()) {
+        methods.add((Method) obj);
+      }
+      return methods;
     }
-    return methods;
+    return null;
   }
 
   public boolean isAnnotProxyFor() {
@@ -261,11 +266,13 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
       @Override
       public void widgetDefaultSelected(SelectionEvent e) {
         methodsTable.setAllChecked(false);
+        onMethodsChange();
       }
 
       @Override
       public void widgetSelected(SelectionEvent e) {
         methodsTable.setAllChecked(false);
+        onMethodsChange();
       }
     });
 
@@ -276,11 +283,13 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
       @Override
       public void widgetDefaultSelected(SelectionEvent e) {
         selectGetterOrSetter(true);
+        onMethodsChange();
       }
 
       @Override
       public void widgetSelected(SelectionEvent e) {
         selectGetterOrSetter(true);
+        onMethodsChange();
       }
     });
 
@@ -291,11 +300,21 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
       @Override
       public void widgetDefaultSelected(SelectionEvent e) {
         selectGetterOrSetter(false);
+        onMethodsChange();
       }
 
       @Override
       public void widgetSelected(SelectionEvent e) {
         selectGetterOrSetter(false);
+        onMethodsChange();
+      }
+    });
+
+    methodsTable.addCheckStateListener(new ICheckStateListener() {
+
+      @Override
+      public void checkStateChanged(CheckStateChangedEvent event) {
+        onMethodsChange();
       }
     });
   }
@@ -455,6 +474,10 @@ public class GenProxyWizardPage extends NewTypeWizardPage {
     locator = null;
     status.setWarning("Cannot test if the locator is correct");
     return status;
+  }
+
+  private void onMethodsChange() {
+    getWizard().getContainer().updateButtons();
   }
 
   private CompilationUnit parse(ICompilationUnit unit) {
