@@ -1,4 +1,13 @@
-GenerateGwtRfProxy is an Eclipse plugin used to generate GWT RequestFactory Proxy.
+GenerateGwtRfProxy is an Eclipse plugin that generates GWT RequestFactory Proxy.
 
 Update site :
 https://raw.github.com/nmorel/GenerateGwtRfProxy/master/update
+
+To use it, go to File (or right click on Package Explorer) > New > RequestFactory Proxy
+If you open the wizard via the right click on Package Explorer, some of the fields will be automatically filled depending on the selection you had on the explorer. Unless you want your proxy in the same package as the class you want to proxy, the fastest way is to right click on the package where you want your proxy and browse for the class to proxy.
+
+The wizard allows you to : 
+ - choose the type of the proxy (EntityProxy or ValueProxy) and the annotation (@ProxyFor or @ProxyForName), 
+ - specify a locator
+ - select the getters and setters you want to include (all selected by default)
+ - generate the proxies for the referenced beans
