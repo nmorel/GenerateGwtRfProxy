@@ -12,6 +12,9 @@
    <feature url="features/com.github.generategwtrfproxy.feature_0.0.3.jar" id="com.github.generategwtrfproxy.feature" version="0.0.3">
       <category name="GenerateGwtRfProxy"/>
    </feature>
+   <feature url="features/com.github.generategwtrfproxy.feature_0.0.4.jar" id="com.github.generategwtrfproxy.feature" version="0.0.4">
+      <category name="GenerateGwtRfProxy"/>
+   </feature>
    <category-def name="GenerateGwtRfProxy" label="GenerateGwtRfProxy">
       <description>
          Plugin to generate GWT RequestFactory Proxy
