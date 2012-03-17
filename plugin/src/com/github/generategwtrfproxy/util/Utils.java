@@ -20,7 +20,8 @@ public class Utils {
       String.class.getName(), Date.class.getName(), BigInteger.class.getName(),
       BigDecimal.class.getName(), Boolean.class.getName(),
       Byte.class.getName(), Character.class.getName(), Double.class.getName(),
-      Float.class.getName(), Integer.class.getName(), Short.class.getName());
+      Float.class.getName(), Integer.class.getName(), Short.class.getName(),
+      Long.class.getName());
 
   public static String format(String source, int formatType) {
 
