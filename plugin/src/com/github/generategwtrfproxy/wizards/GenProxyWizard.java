@@ -121,7 +121,6 @@ public class GenProxyWizard extends Wizard implements INewWizard {
       }
 
       for (Method method : methods) {
-        nextPage = null;
         IType type = getTypeToProxy(method.getParamOrReturnTypeBinding());
         if (null != type) {
           nextPage = mapTypeToPage.get(type);
@@ -134,14 +133,14 @@ public class GenProxyWizard extends Wizard implements INewWizard {
             mapTypeToPage.put(type, nextPage);
             break;
           } else {
-            boolean typeNotAlreadyDefined = true;
             for (GenProxyWizardPage p : pages) {
               // if a page has already been completed for this type
               if (p == nextPage) {
-                typeNotAlreadyDefined = false;
+                nextPage = null;
+                break;
               }
             }
-            if (typeNotAlreadyDefined) {
+            if (null != nextPage) {
               break;
             }
           }
